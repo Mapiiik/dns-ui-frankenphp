@@ -54,10 +54,9 @@ cp .env.example .env
      ```
      Keep `[php_auth] enabled = 1`, the login comes from Caddy. In `[database]` use
      `dsn = "pgsql:host=database dbname=dnsui"` and the user and password from `.env`.
-   - `users.caddy`, one account per line (see `users.caddy.example`); a bcrypt hash comes from:
-     ```bash
-     docker run --rm -it ghcr.io/mapiiik/dns-ui-frankenphp frankenphp hash-password
-     ```
+   - `users.caddy` with the logins, made by `./add_user.sh` (see Users below). On a new installation the
+     DNS UI creates its tables on the first request: start the stack, open the DNS UI once (it fails, the
+     user is not in the database yet), and run `./add_user.sh` again for the same user.
 
 3. Start the stack:
 
@@ -71,14 +70,18 @@ docker compose up -d
 ```
 
 ## 👤 Users
-The login name is the user of the DNS UI. The DNS UI creates an unknown user only from `PHP_AUTH_NAME`,
-`PHP_AUTH_EMAIL` and `PHP_AUTH_GROUPS`, which basic auth does not provide, so add a new user to the
-database first, then its login to `users.caddy`, and restart the web container:
+The login name is the user of the DNS UI. Add a login, or set a new password, with `add_user.sh` next to the
+compose file (with `compose.production.yaml`, set `COMPOSE_FILE=compose.production.yaml`):
 
 ```bash
-docker compose exec database psql -U dnsui -d dnsui -c "INSERT INTO \"user\" (uid, name, email, active, admin, auth_realm) VALUES ('jdoe', 'John Doe', 'jdoe@example.com', 1, 0, 'PHP_AUTH')"
-docker compose restart dns-ui-web
+./add_user.sh
 ```
+
+It asks for the user name and the password (at least 17 characters, `MIN_PASSWORD_LENGTH` changes it),
+writes the bcrypt hash to `users.caddy`, makes the file readable by the container user, and restarts the web
+container. The DNS UI creates an unknown user only from `PHP_AUTH_NAME`, `PHP_AUTH_EMAIL` and
+`PHP_AUTH_GROUPS`, which basic auth does not provide, so for a new user the script asks for the name and
+e-mail and adds the user to the database.
 
 To remove a login, delete its line from `users.caddy`, restart, and deactivate the user in the DNS UI.
 
