@@ -95,7 +95,10 @@ To remove a login, delete its line from `users.caddy`, restart, and deactivate t
   volume
 - `POSTGRES_DB`, `POSTGRES_USER` (default `dnsui`), `POSTGRES_PASSWORD` for the bundled PostgreSQL
 - `SMTP_HOST`, `SMTP_PORT` (default `25`, STARTTLS) for the notifications; without them set
-  `[email] enabled = 0` in `config.ini`
+  `[email] enabled = 0` in `config.ini`. msmtp has no queue: a server that greylists this address
+  loses the message, so let it accept mail from here without greylisting
+- `PGTZ` (default `UTC`), the time zone the change log is stored in; the DNS UI uses `NOW()`, so when
+  moving an existing database keep the time zone of its old server
 
 The DNS UI needs the PowerDNS API (`webserver-allow-from` must include the address this container
 connects from). Expose it only to the networks of your administrators.

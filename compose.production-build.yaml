@@ -15,6 +15,8 @@ services:
       PROXY_ALLOW: ${PROXY_ALLOW:-127.0.0.1/32 ::1/128}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-25}
+      # Time zone of the dates the DNS UI stores (its SQL uses NOW())
+      PGTZ: ${PGTZ:-UTC}
     volumes:
       - ${DATA_DIR:-./data}/config.ini:/app/config/config.ini:ro
       - ${DATA_DIR:-./data}/users.caddy:/etc/frankenphp/users.caddy:ro
