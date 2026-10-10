@@ -1,0 +1,46 @@
+# FrankenPHP, set up like all our Caddy servers: the PROXY protocol is always on, LISTENER_MODE
+# picks how Caddy faces the world (see modes/). Based on the default Caddyfile of FrankenPHP.
+{
+	skip_install_trust
+	import modes/{$LISTENER_MODE:direct}/global.caddy
+
+	# The PROXY protocol header is used when it comes from PROXY_ALLOW (by default this machine only)
+	# and is optional there, from anywhere else it is ignored. So it stays on, with or without a proxy
+	# in front, and nobody else can claim an address.
+	servers {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+				allow {$PROXY_ALLOW:127.0.0.1/32 ::1/128}
+			}
+			tls
+		}
+	}
+
+	{$CADDY_GLOBAL_OPTIONS}
+
+	frankenphp {
+		{$FRANKENPHP_CONFIG}
+	}
+}
+
+{$CADDY_EXTRA_CONFIG}
+
+{$SERVER_NAME:localhost} {
+	root {$SERVER_ROOT:public_html/}
+	encode zstd br gzip
+
+	# Every request needs a login, the DNS UI takes the user name from it
+	basic_auth {
+		import users.caddy
+	}
+
+	{$CADDY_SERVER_EXTRA_DIRECTIVES}
+
+	# The DNS UI routes every page through init.php
+	php_server {
+		index init.php
+	}
+}
+
+import Caddyfile.d/*.caddyfile

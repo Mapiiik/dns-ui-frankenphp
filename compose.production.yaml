@@ -1,0 +1,42 @@
+services:
+  dns-ui-web:
+    image: ghcr.io/mapiiik/dns-ui-frankenphp:latest
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: ${SERVER_NAME:-localhost}
+      LISTENER_MODE: ${LISTENER_MODE:-direct}
+      PROXY_ALLOW: ${PROXY_ALLOW:-127.0.0.1/32 ::1/128}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-25}
+    volumes:
+      - ${DATA_DIR:-./data}/config.ini:/app/config/config.ini:ro
+      - ${DATA_DIR:-./data}/users.caddy:/etc/frankenphp/users.caddy:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    depends_on:
+      database:
+        condition: service_healthy
+
+  database:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dnsui}
+      POSTGRES_USER: ${POSTGRES_USER:-dnsui}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD, config.ini uses the same}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - dns-ui-database:/var/lib/postgresql
+
+volumes:
+  caddy_data:
+  caddy_config:
+  dns-ui-database:

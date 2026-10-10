@@ -1,0 +1,4 @@
+# Accounts for the login, one per line: user name and bcrypt hash.
+# The user name is the uid in the DNS UI. Make a hash with:
+#   docker run --rm -it ghcr.io/mapiiik/dns-ui-frankenphp frankenphp hash-password
+jdoe $2a$14$replace.this.with.the.hash.from.hash-password.................

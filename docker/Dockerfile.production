@@ -1,0 +1,127 @@
+# syntax=docker/dockerfile:1
+
+# Opera DNS UI commit, CI passes the current head of master
+ARG DNSUI_COMMIT=master
+
+########################################
+# Runtime stage                        #
+########################################
+# PHP 8.3: the DNS UI turns every notice into an exception, and from 8.4 its implicitly nullable
+# parameters raise a deprecation notice
+FROM dunglas/frankenphp:php8.3-alpine
+
+ARG DNSUI_COMMIT
+ARG buildno
+ARG gitcommithash
+
+ARG APPLICATION_USER=application
+
+LABEL application="Opera DNS UI"
+LABEL version="${DNSUI_COMMIT}"
+LABEL maintainer="github.com/Mapiiik"
+
+RUN echo "Build number: $buildno"
+RUN echo "Based on commit: $gitcommithash"
+
+############################
+# System dependencies
+############################
+# msmtp delivers the notifications the DNS UI sends with mail()
+RUN apk add --no-cache \
+    msmtp
+
+############################
+# PHP extensions
+############################
+RUN install-php-extensions \
+    curl \
+    intl \
+    ldap \
+    mbstring \
+    pdo_pgsql \
+    opcache
+
+############################
+# PHP configuration
+############################
+# Use production defaults
+RUN cp $PHP_INI_DIR/php.ini-production $PHP_INI_DIR/php.ini
+
+# Timezone
+RUN echo "date.timezone = UTC" > $PHP_INI_DIR/conf.d/99-timezone.ini
+
+# Mail goes through msmtp, configured from SMTP_* on start
+RUN echo 'sendmail_path = "/usr/bin/msmtp -C /etc/msmtprc -t --read-envelope-from"' > $PHP_INI_DIR/conf.d/99-mail.ini
+
+############################
+# Install the DNS UI
+############################
+ADD --keep-git-dir=false https://github.com/operasoftware/dns-ui.git#${DNSUI_COMMIT} /app
+RUN rm -rf /app/tests /app/vagrant /app/phpunit.xml
+
+###########################
+# Add on-start commands
+###########################
+RUN cat <<'EOF' > /usr/local/bin/docker-entrypoint-custom
+#!/bin/sh
+set -e
+
+# Only the server needs the files below, other commands (frankenphp hash-password) run without them
+case "$1" in
+    -*|run) server=1 ;;
+    frankenphp) [ "${2:-}" = run ] && server=1 ;;
+esac
+
+# Caddy asks for a login with the accounts in users.caddy and the DNS UI takes the user from it.
+# Without the file the UI would be open to anyone, so the server does not start.
+if [ -n "${server:-}" ] && { [ ! -f /etc/frankenphp/users.caddy ] || [ ! -s /etc/frankenphp/users.caddy ]; }; then
+    echo "users.caddy is missing or empty in DATA_DIR, refusing to start without logins" >&2
+    exit 1
+fi
+if [ -n "${server:-}" ] && [ ! -f /app/config/config.ini ]; then
+    echo "config.ini is missing in DATA_DIR (template: /app/config/config-sample.ini)" >&2
+    exit 1
+fi
+
+if [ -n "${SMTP_HOST:-}" ]; then
+    cat > /etc/msmtprc <<MSMTP
+defaults
+tls on
+tls_starttls ${SMTP_STARTTLS:-on}
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+syslog off
+logfile -
+
+account default
+host ${SMTP_HOST}
+port ${SMTP_PORT:-25}
+MSMTP
+fi
+
+exec docker-php-entrypoint "$@"
+EOF
+
+RUN chmod +x /usr/local/bin/docker-entrypoint-custom
+
+ENTRYPOINT ["docker-entrypoint-custom"]
+CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
+
+############################
+# Caddy configuration
+############################
+# Shared by all our Caddy servers: PROXY protocol always on, LISTENER_MODE direct or behind-proxy
+COPY caddy/ /etc/frankenphp/
+
+############################
+# Non-root runtime
+############################
+RUN \
+    adduser -D ${APPLICATION_USER}; \
+    # Add additional capability to bind to port 80 and 443
+    setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp; \
+    # Writable for the entrypoint: msmtp configuration
+    touch /etc/msmtprc; \
+    # Give write access to /config/caddy and /data/caddy
+    chown -R ${APPLICATION_USER}:${APPLICATION_USER} /config/caddy /data/caddy /etc/msmtprc
+
+USER ${APPLICATION_USER}
