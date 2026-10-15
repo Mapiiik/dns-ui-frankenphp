@@ -110,7 +110,8 @@ CMD ["--config", "/etc/frankenphp/Caddyfile", "--adapter", "caddyfile"]
 # Caddy configuration
 ############################
 # Shared by all our Caddy servers: PROXY protocol always on, LISTENER_MODE direct or behind-proxy
-COPY caddy/ /etc/frankenphp/
+COPY docker/caddy/ /etc/frankenphp/
+ENV SERVER_ROOT=public_html/
 
 ############################
 # Non-root runtime
