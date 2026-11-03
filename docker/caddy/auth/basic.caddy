@@ -1,0 +1,11 @@
+# Login with basic_auth and the accounts in users.caddy (add_user.sh). PHP takes the user name from
+# the Authorization header on its own.
+
+(auth_site) {
+	basic_auth {
+		import /etc/frankenphp/users.caddy
+	}
+}
+
+(auth_php_server) {
+}

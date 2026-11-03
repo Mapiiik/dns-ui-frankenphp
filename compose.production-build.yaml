@@ -13,6 +13,9 @@ services:
       SERVER_NAME: ${SERVER_NAME:-localhost}
       LISTENER_MODE: ${LISTENER_MODE:-direct}
       PROXY_ALLOW: ${PROXY_ALLOW:-127.0.0.1/32 ::1/128}
+      # The login: basic (users.caddy) or authentik (forward auth to AUTHENTIK_URL)
+      AUTH_MODE: ${AUTH_MODE:-basic}
+      AUTHENTIK_URL: ${AUTHENTIK_URL:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-25}
       # Time zone of the dates the DNS UI stores (its SQL uses NOW())

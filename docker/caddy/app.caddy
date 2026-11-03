@@ -1,17 +1,20 @@
 # What belongs to this application, imported by the Caddyfile, which is the same in every image.
 
+# The login, AUTH_MODE picks it: basic (basic_auth with the accounts in users.caddy) or authentik
+# (forward auth). Both files in auth/ define the snippets auth_site and auth_php_server.
+import auth/{$AUTH_MODE:basic}.caddy
+
 # FrankenPHP's own defaults: classic mode, threads by the number of CPUs
 (app_frankenphp) {
 }
 
 # Every request needs a login, the DNS UI takes the user name from it
 (app_site) {
-	basic_auth {
-		import users.caddy
-	}
+	import auth_site
 }
 
 # The DNS UI routes every page through init.php
 (app_php_server) {
 	index init.php
+	import auth_php_server
 }

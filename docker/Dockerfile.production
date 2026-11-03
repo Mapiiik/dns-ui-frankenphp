@@ -72,11 +72,25 @@ case "$1" in
     frankenphp) [ "${2:-}" = run ] && server=1 ;;
 esac
 
-# Caddy asks for a login with the accounts in users.caddy and the DNS UI takes the user from it.
-# Without the file the UI would be open to anyone, so the server does not start.
-if [ -n "${server:-}" ] && { [ ! -f /etc/frankenphp/users.caddy ] || [ ! -s /etc/frankenphp/users.caddy ]; }; then
-    echo "users.caddy is missing or empty in DATA_DIR, refusing to start without logins" >&2
-    exit 1
+# Caddy asks for a login and the DNS UI takes the user from it: with AUTH_MODE=basic the accounts in
+# users.caddy, with AUTH_MODE=authentik the outpost at AUTHENTIK_URL. Without them the UI would be
+# open to anyone or to no one, so the server does not start.
+if [ -n "${server:-}" ]; then
+    case "${AUTH_MODE:-basic}" in
+        basic)
+            if [ ! -f /etc/frankenphp/users.caddy ] || [ ! -s /etc/frankenphp/users.caddy ]; then
+                echo "users.caddy is missing or empty in DATA_DIR, refusing to start without logins" >&2
+                exit 1
+            fi ;;
+        authentik)
+            if [ -z "${AUTHENTIK_URL:-}" ]; then
+                echo "AUTH_MODE=authentik needs AUTHENTIK_URL, the address of the outpost" >&2
+                exit 1
+            fi ;;
+        *)
+            echo "AUTH_MODE is basic or authentik, not ${AUTH_MODE}" >&2
+            exit 1 ;;
+    esac
 fi
 if [ -n "${server:-}" ] && [ ! -f /app/config/config.ini ]; then
     echo "config.ini is missing in DATA_DIR (template: /app/config/config-sample.ini)" >&2

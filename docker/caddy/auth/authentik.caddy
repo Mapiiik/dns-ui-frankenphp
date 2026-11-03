@@ -1,0 +1,40 @@
+# Login through authentik: an outpost at AUTHENTIK_URL (the embedded one is authentik's own address)
+# decides about every request and hands over the user (forward auth). In authentik this site is a
+# proxy provider in the mode "Forward auth (single application)", bound to that outpost.
+#
+# The outpost finds the provider by X-Forwarded-Host. A proxy in front of authentik has to trust this
+# server's address (trusted_proxies), otherwise it puts its own name there.
+
+(auth_site) {
+	@app not path /outpost.goauthentik.io/*
+
+	# The outpost's own pages: the start of the login, its callback and sign_out
+	handle /outpost.goauthentik.io/* {
+		reverse_proxy {$AUTHENTIK_URL} {
+			header_up Host {upstream_hostport}
+		}
+	}
+
+	forward_auth @app {$AUTHENTIK_URL} {
+		uri /outpost.goauthentik.io/auth/caddy
+		# Headers of these names sent by the client are removed first
+		copy_headers X-Authentik-Username X-Authentik-Name X-Authentik-Email
+		header_up Host {upstream_hostport}
+	}
+
+	# PHP sets PHP_AUTH_USER from basic auth sent by the client itself, over the value below
+	request_header -Authorization
+
+	# Without a user name the DNS UI would create a user with an empty one
+	@no_user not header_regexp X-Authentik-Username .
+	error @no_user 403
+}
+
+# The DNS UI takes the user from PHP_AUTH_USER. A user it does not know yet it creates from the name
+# and e-mail, without admin rights (no groups); an administrator grants them in the DNS UI.
+(auth_php_server) {
+	env PHP_AUTH_USER {http.request.header.X-Authentik-Username}
+	env PHP_AUTH_NAME {http.request.header.X-Authentik-Name}
+	env PHP_AUTH_EMAIL {http.request.header.X-Authentik-Email}
+	env PHP_AUTH_GROUPS ""
+}

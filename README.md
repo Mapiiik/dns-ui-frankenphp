@@ -5,7 +5,7 @@ for the PowerDNS API, on **FrankenPHP**.
 
 This repository provides:
 - a Docker build of the current `master` of Opera DNS UI with the PHP extensions it needs
-- login through Caddy `basic_auth`, the DNS UI takes the user name from it
+- login through Caddy `basic_auth` or authentik (forward auth), the DNS UI takes the user name from it
 - production Docker Compose setup with its own PostgreSQL
 - automated CI that rebuilds the image on new commits of the DNS UI and base image updates
 
@@ -15,7 +15,8 @@ This repository provides:
 
 - **FrankenPHP** runtime (Caddy + PHP in one process), automatic HTTPS
 - **Non-root runtime**
-- **Login required**: the container does not start without accounts in `users.caddy`
+- **Login required**: the container does not start without accounts in `users.caddy`, or without
+  `AUTHENTIK_URL` with `AUTH_MODE=authentik`
 - Notifications of the DNS UI delivered by **msmtp** (`mail()`), configured from the environment
 - **Commit-driven CI**
   - scheduled builds only when Opera DNS UI has a new commit on `master` or `dunglas/frankenphp` a new image
@@ -56,7 +57,8 @@ cp .env.example .env
      `dsn = "pgsql:host=database dbname=dnsui"` and the user and password from `.env`.
    - `users.caddy` with the logins, made by `./add_user.sh` (see Users below). On a new installation the
      DNS UI creates its tables on the first request: start the stack, open the DNS UI once (it fails, the
-     user is not in the database yet), and run `./add_user.sh` again for the same user.
+     user is not in the database yet), and run `./add_user.sh` again for the same user. With
+     `AUTH_MODE=authentik` an empty file is enough, Caddy does not read it.
 
 3. Start the stack:
 
@@ -85,6 +87,27 @@ e-mail and adds the user to the database.
 
 To remove a login, delete its line from `users.caddy`, restart, and deactivate the user in the DNS UI.
 
+### Login through authentik
+With `AUTH_MODE=authentik` Caddy asks an authentik outpost about every request (forward auth) and passes
+the user name, full name and e-mail to the DNS UI. `AUTHENTIK_URL` is the outpost; the embedded outpost
+is authentik's own address, e.g. `https://login.example.com`. In authentik:
+
+- a proxy provider in the mode *Forward auth (single application)* with the address of the DNS UI as the
+  external host, added to that outpost, and an application with it; who may log in is set on the
+  application (a group binding),
+- the outpost finds the provider by `X-Forwarded-Host`. When authentik itself runs behind a proxy, that
+  proxy has to trust the address the DNS UI connects from (Caddy: `trusted_proxies`), or it puts its own
+  name in the header and the outpost does not find the provider.
+
+The user name in authentik is the user of the DNS UI (`uid`). A user it does not know yet the DNS UI creates
+on the first login, active but without admin rights; an administrator grants them on the user's page.
+Users from basic auth keep their history when their `uid` is renamed to the authentik name, the change log
+refers to the user by `id`. The DNS UI has no session of its own, the login lasts as long as the outpost's
+(the provider's token validity), and `/outpost.goauthentik.io/sign_out` signs out.
+
+`add_user.sh` and `users.caddy` are only for `AUTH_MODE=basic`, which stays the way back when authentik is
+not available.
+
 ## ⚙️ Configuration
 - `SERVER_NAME` (automatic ACME certificates; otherwise self-signed HTTPS)
 - `LISTENER_MODE` (`direct` by default; `behind-proxy` behind an SNI proxy such as HAProxy, which owns
@@ -93,6 +116,8 @@ To remove a login, delete its line from `users.caddy`, restart, and deactivate t
   until they trust its root certificate, `/data/caddy/pki/authorities/local/root.crt` in the container)
 - `PROXY_ALLOW` (where the PROXY protocol header is trusted from: the proxy's network; by default
   only this machine. The header is optional, so it works with or without a proxy)
+- `AUTH_MODE` (`basic` by default, the accounts in `users.caddy`; `authentik` with `AUTHENTIK_URL`, see
+  Login through authentik)
 - `DATA_DIR` (default `./data`) holds `config.ini` and `users.caddy`, the database has its own Docker
   volume
 - `POSTGRES_DB`, `POSTGRES_USER` (default `dnsui`), `POSTGRES_PASSWORD` for the bundled PostgreSQL
